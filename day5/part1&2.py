@@ -1,6 +1,8 @@
+from functools import cache
+import multiprocessing
 from pathlib import Path
 import re
-from typing import Callable
+from typing import Callable, Iterable
 
 
 with open(Path(__file__).parent / "input.txt") as f:
@@ -8,7 +10,7 @@ with open(Path(__file__).parent / "input.txt") as f:
     content_str = " ".join(content)
 
 seeds_line = content[0]
-seeds = set(map(lambda x: int(x.strip()), seeds_line.split(":")[1].split()))
+seeds = list((map(lambda x: int(x.strip()), seeds_line.split(":")[1].split())))
 
 
 def process_number_line(number_line: str):
@@ -35,10 +37,11 @@ def prepare_functions(ranges: list[tuple[int, int, int]]):
         )
 
     source_to_dest.append(lambda x: x)
-    return source_to_dest
+    return tuple(source_to_dest)
 
 
-def find_value(source_to_dest: list[Callable[[int], int | None]], value: int) -> int:
+@cache
+def find_value(source_to_dest: tuple[Callable[[int], int | None]], value: int) -> int:
     for func in source_to_dest:
         if ans := func(value):
             return ans
@@ -46,13 +49,13 @@ def find_value(source_to_dest: list[Callable[[int], int | None]], value: int) ->
     raise ValueError(f"unable to find {value=} for {source_to_dest=}")
 
 
-seed_to_soil = []
-soil_to_fertilizer = []
-fertilizer_to_water = []
-water_to_light = []
-light_to_temperature = []
-temperature_to_humidity = []
-humidity_to_location = []
+seed_to_soil = tuple()
+soil_to_fertilizer = tuple()
+fertilizer_to_water = tuple()
+water_to_light = tuple()
+light_to_temperature = tuple()
+temperature_to_humidity = tuple()
+humidity_to_location = tuple()
 
 text_spans = [match.span() for match in re.finditer(r"\w+-to-\w+ map:", content_str)]
 for i in range(len(text_spans)):
@@ -93,17 +96,26 @@ for i in range(len(text_spans)):
         humidity_to_location = prepare_functions(ranges)
 
 
-# first set min location to max, then compare and reset it
-min_location = float("inf")
+def find_min_location(seeds: Iterable[int]):
+    # first set min location to max, then compare and reset it
+    min_location = float("inf")
 
-for seed in seeds:
-    soil = find_value(seed_to_soil, seed)
-    fertilizer = find_value(soil_to_fertilizer, soil)
-    water = find_value(fertilizer_to_water, fertilizer)
-    light = find_value(water_to_light, water)
-    temperature = find_value(light_to_temperature, light)
-    humidity = find_value(temperature_to_humidity, temperature)
-    location = find_value(humidity_to_location, humidity)
-    min_location = min(min_location, location)
+    for seed in seeds:
+        soil = find_value(seed_to_soil, seed)
+        fertilizer = find_value(soil_to_fertilizer, soil)
+        water = find_value(fertilizer_to_water, fertilizer)
+        light = find_value(water_to_light, water)
+        temperature = find_value(light_to_temperature, light)
+        humidity = find_value(temperature_to_humidity, temperature)
+        location = find_value(humidity_to_location, humidity)
+        min_location = min(min_location, location)
 
-print(min_location)
+    return min_location
+
+
+if __name__ == "__main__":
+    print(find_min_location(seeds))
+    seed_ranges = [range(seeds[i], seeds[i] + seeds[i + 1]) for i in range(0, len(seeds), 2)]
+    with multiprocessing.Pool() as pool:
+        results = pool.map(find_min_location, seed_ranges)
+    print(min(results))
